@@ -1,6 +1,10 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileIcon, Trash2, Eye, Loader2, Image } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { FileIcon, Trash2, Eye, Loader2, Image, Share2, Copy, Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +28,11 @@ interface FileGridProps {
 const FileGrid = ({ files, loading, onDelete }: FileGridProps) => {
   const { toast } = useToast();
   const [viewingFile, setViewingFile] = useState<string | null>(null);
+  const [sharingFile, setSharingFile] = useState<FileData | null>(null);
+  const [shareSettings, setShareSettings] = useState({
+    isPublic: false,
+    expiresAt: ""
+  });
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return bytes + " B";
@@ -52,6 +61,61 @@ const FileGrid = ({ files, loading, onDelete }: FileGridProps) => {
         variant: "destructive",
       });
     }
+  };
+
+  const handleShare = async (file: FileData) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Create or get existing share
+      const { data: existingShare } = await supabase
+        .from('file_shares')
+        .select('share_token')
+        .eq('file_id', file.id)
+        .eq('created_by', user.id)
+        .single();
+
+      let shareToken: string;
+
+      if (existingShare) {
+        shareToken = existingShare.share_token;
+      } else {
+        // Create new share
+        const { data: newShare, error } = await supabase
+          .from('file_shares')
+          .insert({
+            file_id: file.id,
+            created_by: user.id,
+            is_public: shareSettings.isPublic,
+            expires_at: shareSettings.expiresAt || null
+          })
+          .select('share_token')
+          .single();
+
+        if (error) throw error;
+        shareToken = newShare.share_token;
+      }
+
+      const shareUrl = `${window.location.origin}/file/${file.id}?token=${shareToken}`;
+      
+      await navigator.clipboard.writeText(shareUrl);
+      toast({
+        title: "Share link copied!",
+        description: "The file share link has been copied to your clipboard",
+      });
+    } catch (error) {
+      console.error("Error sharing file:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create share link",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const openFileInNewTab = (file: FileData) => {
+    window.open(`/file/${file.id}`, '_blank');
   };
 
   if (loading) {
@@ -105,14 +169,78 @@ const FileGrid = ({ files, loading, onDelete }: FileGridProps) => {
                     variant="outline"
                     onClick={() => handleView(file)}
                     className="h-8 w-8"
+                    title="View file"
                   >
                     <Eye className="w-4 h-4" />
                   </Button>
                   <Button
                     size="icon"
+                    variant="outline"
+                    onClick={() => openFileInNewTab(file)}
+                    className="h-8 w-8"
+                    title="Open in new tab"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </Button>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-8 w-8"
+                        title="Share file"
+                        onClick={() => setSharingFile(file)}
+                      >
+                        <Share2 className="w-4 h-4" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Share "{file.name}"</DialogTitle>
+                        <DialogDescription>
+                          Create a shareable link for this file
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            id="public"
+                            checked={shareSettings.isPublic}
+                            onCheckedChange={(checked) => 
+                              setShareSettings(prev => ({ ...prev, isPublic: checked }))
+                            }
+                          />
+                          <Label htmlFor="public">Make publicly accessible</Label>
+                        </div>
+                        <div>
+                          <Label htmlFor="expires">Expires at (optional)</Label>
+                          <Input
+                            id="expires"
+                            type="datetime-local"
+                            value={shareSettings.expiresAt}
+                            onChange={(e) => 
+                              setShareSettings(prev => ({ ...prev, expiresAt: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            onClick={() => handleShare(file)}
+                            className="flex items-center gap-2"
+                          >
+                            <Copy className="w-4 h-4" />
+                            Copy Share Link
+                          </Button>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                  <Button
+                    size="icon"
                     variant="destructive"
                     onClick={() => onDelete(file.id, file.storage_path)}
                     className="h-8 w-8"
+                    title="Delete file"
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>

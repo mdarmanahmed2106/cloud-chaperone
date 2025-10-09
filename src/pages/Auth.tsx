@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, isSupabaseConfigured, DEMO_MODE } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,8 +61,10 @@ const Auth = () => {
       if (error) throw error;
 
       toast({
-        title: "Success!",
-        description: "Account created successfully. You can now login.",
+        title: DEMO_MODE ? "Demo Mode - Account Created!" : "Success!",
+        description: DEMO_MODE 
+          ? "Demo account created. You can now explore the app!" 
+          : "Account created successfully. You can now login.",
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -129,6 +131,11 @@ const Auth = () => {
           </CardTitle>
           <CardDescription className="text-base">
             Your personal file storage solution
+            {DEMO_MODE && (
+              <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-sm text-yellow-800">
+                🚀 Demo Mode Active - No real auth required!
+              </div>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>

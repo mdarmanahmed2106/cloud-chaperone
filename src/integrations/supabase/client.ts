@@ -8,10 +8,32 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
-  }
-});
+// Basic validation to help during local development when env vars are missing/placeholders
+export const isSupabaseConfigured = Boolean(
+  typeof SUPABASE_URL === 'string' &&
+  /^https?:\/\//.test(String(SUPABASE_URL)) &&
+  typeof SUPABASE_PUBLISHABLE_KEY === 'string' &&
+  String(SUPABASE_URL).includes('YOUR-PROJECT-REF') === false &&
+  String(SUPABASE_PUBLISHABLE_KEY).includes('YOUR-ANON-KEY') === false
+);
+
+// Demo mode flag - set to true to bypass Supabase and use mock auth
+// Set to false to require real Supabase credentials for production
+export const DEMO_MODE = false; // Disabled for production - requires real Supabase setup
+
+const notConfiguredError = new Error(
+  'Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env.local.'
+);
+
+export const supabase = isSupabaseConfigured
+  ? createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      auth: {
+        storage: localStorage,
+        persistSession: true,
+        autoRefreshToken: true,
+      }
+    })
+  // Error when not configured (production mode)
+  : (() => {
+      throw notConfiguredError;
+    })() as any;

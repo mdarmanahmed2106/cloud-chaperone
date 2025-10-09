@@ -14,6 +14,99 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_requests: {
+        Row: {
+          created_at: string
+          file_id: string
+          id: string
+          message: string | null
+          owner_id: string
+          requested_by: string
+          requested_permission: Database["public"]["Enums"]["permission_type"]
+          responded_at: string | null
+          status: Database["public"]["Enums"]["request_status"]
+        }
+        Insert: {
+          created_at?: string
+          file_id: string
+          id?: string
+          message?: string | null
+          owner_id: string
+          requested_by: string
+          requested_permission?: Database["public"]["Enums"]["permission_type"]
+          responded_at?: string | null
+          status?: Database["public"]["Enums"]["request_status"]
+        }
+        Update: {
+          created_at?: string
+          file_id?: string
+          id?: string
+          message?: string | null
+          owner_id?: string
+          requested_by?: string
+          requested_permission?: Database["public"]["Enums"]["permission_type"]
+          responded_at?: string | null
+          status?: Database["public"]["Enums"]["request_status"]
+        }
+        Relationships: []
+      }
+      file_permissions: {
+        Row: {
+          file_id: string
+          granted_at: string
+          granted_by: string
+          id: string
+          permission_type: Database["public"]["Enums"]["permission_type"]
+          user_id: string
+        }
+        Insert: {
+          file_id: string
+          granted_at?: string
+          granted_by: string
+          id?: string
+          permission_type: Database["public"]["Enums"]["permission_type"]
+          user_id: string
+        }
+        Update: {
+          file_id?: string
+          granted_at?: string
+          granted_by?: string
+          id?: string
+          permission_type?: Database["public"]["Enums"]["permission_type"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      file_shares: {
+        Row: {
+          created_at: string
+          created_by: string
+          expires_at: string | null
+          file_id: string
+          id: string
+          is_public: boolean
+          share_token: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          expires_at?: string | null
+          file_id: string
+          id?: string
+          is_public?: boolean
+          share_token?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          expires_at?: string | null
+          file_id?: string
+          id?: string
+          is_public?: boolean
+          share_token?: string
+        }
+        Relationships: []
+      }
       files: {
         Row: {
           created_at: string
@@ -94,6 +187,26 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      approve_access_request: {
+        Args: {
+          request_id: string
+          granted_permission?: Database["public"]["Enums"]["permission_type"]
+        }
+        Returns: boolean
+      }
+      deny_access_request: {
+        Args: {
+          request_id: string
+        }
+        Returns: boolean
+      }
+      has_file_permission: {
+        Args: {
+          file_uuid: string
+          required_permission?: Database["public"]["Enums"]["permission_type"]
+        }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -104,6 +217,8 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      permission_type: "view" | "edit" | "admin"
+      request_status: "pending" | "approved" | "denied"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -232,6 +347,8 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      permission_type: ["view", "edit", "admin"],
+      request_status: ["pending", "approved", "denied"],
     },
   },
 } as const
