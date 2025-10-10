@@ -17,6 +17,7 @@ interface FileWithUser {
   name: string;
   size: number;
   mime_type: string;
+  storage_path: string;
   created_at: string;
   user_id: string;
   profiles: {
@@ -25,27 +26,6 @@ interface FileWithUser {
   };
 }
 
-interface AccessRequest {
-  id: string;
-  file_id: string;
-  requested_by: string;
-  owner_id: string;
-  status: 'pending' | 'approved' | 'denied';
-  requested_permission: 'view' | 'edit' | 'admin';
-  message: string | null;
-  created_at: string;
-  files: {
-    name: string;
-  };
-  requester_profile: {
-    email: string;
-    full_name: string | null;
-  };
-  owner_profile: {
-    email: string;
-    full_name: string | null;
-  };
-}
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -63,7 +43,6 @@ const AdminDashboard = () => {
     }
   };
   const [files, setFiles] = useState<FileWithUser[]>([]);
-  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterUser, setFilterUser] = useState<string>("all");
@@ -100,7 +79,6 @@ const AdminDashboard = () => {
 
     // If admin, load the data
     loadFiles();
-    loadAccessRequests();
   };
 
   const loadFiles = async () => {
@@ -129,16 +107,57 @@ const AdminDashboard = () => {
         .select('id, email, full_name')
         .in('id', userIds);
 
-      if (profilesError) throw profilesError;
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        throw profilesError;
+      }
+
+      console.log('User IDs:', userIds);
+      console.log('Profiles data:', profilesData);
+
+      // Create missing profiles
+      const existingProfileIds = profilesData?.map(p => p.id) || [];
+      const missingUserIds = userIds.filter(id => !existingProfileIds.includes(id));
+      
+      if (missingUserIds.length > 0) {
+        console.log('Creating missing profiles for:', missingUserIds);
+        
+        for (const userId of missingUserIds) {
+          try {
+            const { data: newProfile, error: insertError } = await supabase
+              .from('profiles')
+              .insert({
+                id: userId,
+                email: `user-${userId.slice(0, 8)}@example.com`,
+                full_name: `User ${userId.slice(0, 8)}`
+              })
+              .select('id, email, full_name')
+              .single();
+              
+            if (insertError) {
+              console.warn(`Failed to create profile for ${userId}:`, insertError);
+            } else {
+              console.log(`Created profile:`, newProfile);
+              profilesData.push(newProfile);
+            }
+          } catch (error) {
+            console.warn(`Error creating profile for ${userId}:`, error);
+          }
+        }
+      }
 
       // Combine files with profile data
-      const filesWithProfiles = filesData.map(file => ({
-        ...file,
-        profiles: profilesData?.find(profile => profile.id === file.user_id) || {
-          email: 'Unknown',
-          full_name: null
-        }
-      }));
+      const filesWithProfiles = filesData.map(file => {
+        const profile = profilesData?.find(profile => profile.id === file.user_id);
+        console.log(`File ${file.name} (${file.user_id}) -> Profile:`, profile);
+        return {
+          ...file,
+          profiles: profile || {
+            email: 'Unknown User',
+            full_name: null
+          }
+        };
+      });
 
       setFiles(filesWithProfiles);
     } catch (error) {
@@ -153,63 +172,6 @@ const AdminDashboard = () => {
     }
   };
 
-  const loadAccessRequests = async () => {
-    try {
-      // First, get all access requests
-      const { data: requestsData, error: requestsError } = await supabase
-        .from('access_requests')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (requestsError) throw requestsError;
-
-      if (!requestsData || requestsData.length === 0) {
-        setAccessRequests([]);
-        return;
-      }
-
-      // Get unique file IDs and user IDs
-      const fileIds = [...new Set(requestsData.map(req => req.file_id))];
-      const userIds = [...new Set([
-        ...requestsData.map(req => req.requested_by),
-        ...requestsData.map(req => req.owner_id)
-      ])];
-
-      // Fetch files data
-      const { data: filesData, error: filesError } = await supabase
-        .from('files')
-        .select('id, name')
-        .in('id', fileIds);
-
-      if (filesError) throw filesError;
-
-      // Fetch profiles data
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, email, full_name')
-        .in('id', userIds);
-
-      if (profilesError) throw profilesError;
-
-      // Combine access requests with related data
-      const requestsWithData = requestsData.map(request => ({
-        ...request,
-        files: filesData?.find(file => file.id === request.file_id) || { name: 'Unknown File' },
-        requester_profile: profilesData?.find(profile => profile.id === request.requested_by) || {
-          email: 'Unknown',
-          full_name: null
-        },
-        owner_profile: profilesData?.find(profile => profile.id === request.owner_id) || {
-          email: 'Unknown',
-          full_name: null
-        }
-      }));
-
-      setAccessRequests(requestsWithData);
-    } catch (error) {
-      console.error('Error loading access requests:', error);
-    }
-  };
 
   const handleDeleteFile = async (fileId: string, fileName: string) => {
     if (!confirm(`Are you sure you want to delete "${fileName}"? This action cannot be undone.`)) {
@@ -297,60 +259,31 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleApproveRequest = async (requestId: string, permission: string) => {
+  const handleViewFile = async (file: FileWithUser) => {
     try {
-      const { data, error } = await supabase.rpc('approve_access_request', {
-        request_id: requestId,
-        granted_permission: permission
-      });
+      const { data, error } = await supabase.storage
+        .from("user-files")
+        .createSignedUrl(file.storage_path, 3600);
 
       if (error) throw error;
 
-      if (data) {
-        toast({
-          title: "Success",
-          description: "Access request approved successfully",
-        });
-        loadAccessRequests();
+      if (file.mime_type.startsWith("image/")) {
+        // For images, open in a modal or new tab
+        window.open(data.signedUrl, "_blank");
       } else {
-        throw new Error('Failed to approve request');
+        // For other files, open in new tab
+        window.open(data.signedUrl, "_blank");
       }
     } catch (error) {
-      console.error('Error approving request:', error);
+      console.error("Error viewing file:", error);
       toast({
         title: "Error",
-        description: "Failed to approve access request",
+        description: "Failed to view file",
         variant: "destructive",
       });
     }
   };
 
-  const handleDenyRequest = async (requestId: string) => {
-    try {
-      const { data, error } = await supabase.rpc('deny_access_request', {
-        request_id: requestId
-      });
-
-      if (error) throw error;
-
-      if (data) {
-        toast({
-          title: "Success",
-          description: "Access request denied successfully",
-        });
-        loadAccessRequests();
-      } else {
-        throw new Error('Failed to deny request');
-      }
-    } catch (error) {
-      console.error('Error denying request:', error);
-      toast({
-        title: "Error",
-        description: "Failed to deny access request",
-        variant: "destructive",
-      });
-    }
-  };
 
   const filteredFiles = files.filter(file => {
     const matchesSearch = file.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -414,8 +347,8 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+       {/* Stats Cards */}
+       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Files</CardTitle>
@@ -441,16 +374,6 @@ const AdminDashboard = () => {
           <CardContent>
             <div className="text-2xl font-bold">
               {formatFileSize(files.reduce((sum, file) => sum + file.size, 0))}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Pending Requests</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {accessRequests.filter(r => r.status === 'pending').length}
             </div>
           </CardContent>
         </Card>
@@ -573,11 +496,11 @@ const AdminDashboard = () => {
                         </div>
                       </TableCell>
                       <TableCell>{formatFileSize(file.size)}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {file.mime_type.split('/')[0]}
-                        </Badge>
-                      </TableCell>
+                       <TableCell>
+                         <Badge variant="secondary">
+                           {file.mime_type.includes('pdf') ? 'pdf' : file.mime_type.split('/')[0]}
+                         </Badge>
+                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Calendar className="w-4 h-4" />
@@ -596,7 +519,7 @@ const AdminDashboard = () => {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => window.open(`/file/${file.id}`, '_blank')}
+                            onClick={() => handleViewFile(file)}
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
@@ -623,73 +546,6 @@ const AdminDashboard = () => {
         </CardContent>
       </Card>
 
-      {/* Access Requests */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Access Requests</CardTitle>
-          <CardDescription>
-            Manage file access requests from users
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {accessRequests.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No access requests
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {accessRequests.map((request) => (
-                <div key={request.id} className="border rounded-lg p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Badge variant={request.status === 'pending' ? 'default' : request.status === 'approved' ? 'secondary' : 'destructive'}>
-                          {request.status}
-                        </Badge>
-                        <Badge variant="outline">
-                          {request.requested_permission}
-                        </Badge>
-                      </div>
-                      <div>
-                        <p className="font-medium">{request.files.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          <strong>{request.requester_profile.full_name || request.requester_profile.email}</strong> 
-                          {' '}requested {request.requested_permission} access from{' '}
-                          <strong>{request.owner_profile.full_name || request.owner_profile.email}</strong>
-                        </p>
-                        {request.message && (
-                          <p className="text-sm mt-1">"{request.message}"</p>
-                        )}
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {formatDate(request.created_at)}
-                        </p>
-                      </div>
-                    </div>
-                    {request.status === 'pending' && (
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleApproveRequest(request.id, request.requested_permission)}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleDenyRequest(request.id)}
-                        >
-                          Deny
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 };
