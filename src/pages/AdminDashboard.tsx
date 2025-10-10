@@ -95,19 +95,41 @@ const AdminDashboard = () => {
   const loadFiles = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      
+      // First, get all files
+      const { data: filesData, error: filesError } = await supabase
         .from('files')
-        .select(`
-          *,
-          profiles!files_user_id_fkey (
-            email,
-            full_name
-          )
-        `)
+        .select('*')
         .order(sortBy, { ascending: sortOrder === "asc" });
 
-      if (error) throw error;
-      setFiles(data || []);
+      if (filesError) throw filesError;
+
+      if (!filesData || filesData.length === 0) {
+        setFiles([]);
+        return;
+      }
+
+      // Get all unique user IDs from files
+      const userIds = [...new Set(filesData.map(file => file.user_id))];
+      
+      // Fetch profiles for all users
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, email, full_name')
+        .in('id', userIds);
+
+      if (profilesError) throw profilesError;
+
+      // Combine files with profile data
+      const filesWithProfiles = filesData.map(file => ({
+        ...file,
+        profiles: profilesData?.find(profile => profile.id === file.user_id) || {
+          email: 'Unknown',
+          full_name: null
+        }
+      }));
+
+      setFiles(filesWithProfiles);
     } catch (error) {
       console.error('Error loading files:', error);
       toast({
@@ -122,26 +144,57 @@ const AdminDashboard = () => {
 
   const loadAccessRequests = async () => {
     try {
-      const { data, error } = await supabase
+      // First, get all access requests
+      const { data: requestsData, error: requestsError } = await supabase
         .from('access_requests')
-        .select(`
-          *,
-          files!access_requests_file_id_fkey (
-            name
-          ),
-          requester_profile:profiles!access_requests_requested_by_fkey (
-            email,
-            full_name
-          ),
-          owner_profile:profiles!access_requests_owner_id_fkey (
-            email,
-            full_name
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setAccessRequests(data || []);
+      if (requestsError) throw requestsError;
+
+      if (!requestsData || requestsData.length === 0) {
+        setAccessRequests([]);
+        return;
+      }
+
+      // Get unique file IDs and user IDs
+      const fileIds = [...new Set(requestsData.map(req => req.file_id))];
+      const userIds = [...new Set([
+        ...requestsData.map(req => req.requested_by),
+        ...requestsData.map(req => req.owner_id)
+      ])];
+
+      // Fetch files data
+      const { data: filesData, error: filesError } = await supabase
+        .from('files')
+        .select('id, name')
+        .in('id', fileIds);
+
+      if (filesError) throw filesError;
+
+      // Fetch profiles data
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, email, full_name')
+        .in('id', userIds);
+
+      if (profilesError) throw profilesError;
+
+      // Combine access requests with related data
+      const requestsWithData = requestsData.map(request => ({
+        ...request,
+        files: filesData?.find(file => file.id === request.file_id) || { name: 'Unknown File' },
+        requester_profile: profilesData?.find(profile => profile.id === request.requested_by) || {
+          email: 'Unknown',
+          full_name: null
+        },
+        owner_profile: profilesData?.find(profile => profile.id === request.owner_id) || {
+          email: 'Unknown',
+          full_name: null
+        }
+      }));
+
+      setAccessRequests(requestsWithData);
     } catch (error) {
       console.error('Error loading access requests:', error);
     }
@@ -158,7 +211,7 @@ const AdminDashboard = () => {
         .from('files')
         .select('storage_path, user_id')
         .eq('id', fileId)
-        .single();
+        .maybeSingle();
 
       if (fileData) {
         const { error: storageError } = await supabase.storage
@@ -200,7 +253,7 @@ const AdminDashboard = () => {
         .from('files')
         .select('storage_path, user_id')
         .eq('id', fileId)
-        .single();
+        .maybeSingle();
 
       if (!fileData) throw new Error('File not found');
 
@@ -228,6 +281,61 @@ const AdminDashboard = () => {
       toast({
         title: "Error",
         description: "Failed to download file",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleApproveRequest = async (requestId: string, permission: string) => {
+    try {
+      const { data, error } = await supabase.rpc('approve_access_request', {
+        request_id: requestId,
+        granted_permission: permission
+      });
+
+      if (error) throw error;
+
+      if (data) {
+        toast({
+          title: "Success",
+          description: "Access request approved successfully",
+        });
+        loadAccessRequests();
+      } else {
+        throw new Error('Failed to approve request');
+      }
+    } catch (error) {
+      console.error('Error approving request:', error);
+      toast({
+        title: "Error",
+        description: "Failed to approve access request",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDenyRequest = async (requestId: string) => {
+    try {
+      const { data, error } = await supabase.rpc('deny_access_request', {
+        request_id: requestId
+      });
+
+      if (error) throw error;
+
+      if (data) {
+        toast({
+          title: "Success",
+          description: "Access request denied successfully",
+        });
+        loadAccessRequests();
+      } else {
+        throw new Error('Failed to deny request');
+      }
+    } catch (error) {
+      console.error('Error denying request:', error);
+      toast({
+        title: "Error",
+        description: "Failed to deny access request",
         variant: "destructive",
       });
     }
@@ -556,26 +664,14 @@ const AdminDashboard = () => {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => {
-                            // TODO: Implement approve/deny functionality
-                            toast({
-                              title: "Feature Coming Soon",
-                              description: "Access request management will be available soon",
-                            });
-                          }}
+                          onClick={() => handleApproveRequest(request.id, request.requested_permission)}
                         >
                           Approve
                         </Button>
                         <Button
                           size="sm"
                           variant="destructive"
-                          onClick={() => {
-                            // TODO: Implement approve/deny functionality
-                            toast({
-                              title: "Feature Coming Soon",
-                              description: "Access request management will be available soon",
-                            });
-                          }}
+                          onClick={() => handleDenyRequest(request.id)}
                         >
                           Deny
                         </Button>

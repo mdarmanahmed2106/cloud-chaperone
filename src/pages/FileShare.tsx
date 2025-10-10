@@ -72,25 +72,38 @@ const FileShare = () => {
       // Get file information
       const { data: fileData, error: fileError } = await supabase
         .from('files')
-        .select(`
-          *,
-          profiles!files_user_id_fkey (
-            email,
-            full_name
-          )
-        `)
+        .select('*')
         .eq('id', fileId)
         .single();
 
       if (fileError) throw fileError;
-      setFile(fileData);
+
+      // Get profile information for the file owner
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, email, full_name')
+        .eq('id', fileData.user_id)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+
+      // Combine file data with profile data
+      const fileWithProfile = {
+        ...fileData,
+        profiles: profileData || {
+          email: 'Unknown',
+          full_name: null
+        }
+      };
+
+      setFile(fileWithProfile);
 
       // Check if current user has access
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
         // Check if user is the owner
-        if (fileData.user_id === user.id) {
+        if (fileWithProfile.user_id === user.id) {
           setHasAccess(true);
         } else {
           // Check if user has explicit permission
@@ -99,7 +112,7 @@ const FileShare = () => {
             .select('permission_type')
             .eq('file_id', fileId)
             .eq('user_id', user.id)
-            .single();
+            .maybeSingle();
 
           if (permission) {
             setHasAccess(true);
@@ -110,7 +123,7 @@ const FileShare = () => {
               .select('*')
               .eq('file_id', fileId)
               .eq('requested_by', user.id)
-              .single();
+              .maybeSingle();
 
             if (request) {
               setAccessRequest(request);
@@ -176,7 +189,7 @@ const FileShare = () => {
         .from('files')
         .select('storage_path, user_id')
         .eq('id', file.id)
-        .single();
+        .maybeSingle();
 
       if (!fileData) throw new Error('File not found');
 

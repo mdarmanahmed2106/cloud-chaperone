@@ -74,7 +74,7 @@ const FileGrid = ({ files, loading, onDelete }: FileGridProps) => {
         .select('share_token')
         .eq('file_id', file.id)
         .eq('created_by', user.id)
-        .single();
+        .maybeSingle();
 
       let shareToken: string;
 
@@ -91,7 +91,7 @@ const FileGrid = ({ files, loading, onDelete }: FileGridProps) => {
             expires_at: shareSettings.expiresAt || null
           })
           .select('share_token')
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
         shareToken = newShare.share_token;
