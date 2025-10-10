@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Trash2, Download, Eye, User, Calendar, HardDrive } from "lucide-react";
+import { Trash2, Download, Eye, User, Calendar, HardDrive, LogOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface FileWithUser {
@@ -50,6 +50,18 @@ interface AccessRequest {
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast({
+        title: "Logout Failed",
+        description: "There was an issue logging you out. Please try again.",
+        variant: "destructive",
+      });
+    } else {
+      navigate("/auth");
+    }
+  };
   const [files, setFiles] = useState<FileWithUser[]>([]);
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +69,6 @@ const AdminDashboard = () => {
   const [filterUser, setFilterUser] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("created_at");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     checkAdminAccess();
@@ -100,7 +111,7 @@ const AdminDashboard = () => {
       const { data: filesData, error: filesError } = await supabase
         .from('files')
         .select('*')
-        .order(sortBy, { ascending: sortOrder === "asc" });
+        .order(sortBy, { ascending: false });
 
       if (filesError) throw filesError;
 
@@ -385,7 +396,17 @@ const AdminDashboard = () => {
           <h1 className="text-3xl font-bold">Admin Dashboard</h1>
           <p className="text-muted-foreground">Manage all files and access requests</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+            onClick={handleLogout}
+            title="Logout"
+          >
+            <LogOut className="w-4 h-4" />
+            Logout
+          </Button>
           <HardDrive className="w-5 h-5" />
           <span className="text-sm text-muted-foreground">
             {files.length} files total
@@ -501,22 +522,7 @@ const AdminDashboard = () => {
               </Select>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant={sortOrder === "desc" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSortOrder("desc")}
-            >
-              Newest First
-            </Button>
-            <Button
-              variant={sortOrder === "asc" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSortOrder("asc")}
-            >
-              Oldest First
-            </Button>
-          </div>
+          {/* Removed sort order controls */}
         </CardContent>
       </Card>
 

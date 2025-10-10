@@ -148,17 +148,17 @@ const FileGrid = ({ files, loading, onDelete }: FileGridProps) => {
         {files.map((file) => (
           <Card
             key={file.id}
-            className="group hover:shadow-elegant transition-all duration-300 border-border/50 bg-gradient-to-br from-card to-card/80 overflow-hidden"
+            className="group hover:shadow-elegant transition-all duration-300 border-primary/30 bg-gradient-to-br from-primary/10 to-accent/10 overflow-hidden"
           >
             <CardContent className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1 min-w-0">
                   {file.mime_type.startsWith("image/") ? (
-                    <div className="bg-gradient-to-br from-primary/10 to-accent/10 p-3 rounded-lg inline-block border border-primary/20">
+                    <div className="bg-gradient-to-br from-primary/25 to-accent/20 p-3 rounded-lg inline-block border border-primary/40">
                       <Image className="w-8 h-8 text-primary" />
                     </div>
                   ) : (
-                    <div className="bg-gradient-to-br from-accent/10 to-primary/10 p-3 rounded-lg inline-block border border-accent/20">
+                    <div className="bg-gradient-to-br from-accent/25 to-primary/20 p-3 rounded-lg inline-block border border-accent/40">
                       <FileIcon className="w-8 h-8 text-accent" />
                     </div>
                   )}

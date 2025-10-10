@@ -16,8 +16,13 @@ const Index = () => {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
-      <div className="container mx-auto px-4 py-16">
+    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(1200px_600px_at_10%_-10%,hsl(var(--primary)/0.15),transparent_60%),radial-gradient(1000px_500px_at_90%_-20%,hsl(var(--accent)/0.12),transparent_60%),linear-gradient(to_bottom_right,hsl(var(--background)),hsl(var(--background)))]">
+      {/* Decorative background accents */}
+      <div className="pointer-events-none absolute -top-24 -left-24 h-[520px] w-[520px] rounded-full bg-primary/15 blur-3xl" />
+      <div className="pointer-events-none absolute -top-32 -right-24 h-[420px] w-[420px] rounded-full bg-accent/15 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-[-180px] left-1/2 -translate-x-1/2 h-[600px] w-[900px] rounded-[40%] bg-[conic-gradient(from_180deg_at_50%_50%,hsl(var(--primary)/0.08),hsl(var(--accent)/0.08),transparent_60%)] blur-2xl" />
+
+      <div className="relative container mx-auto px-4 py-16">
         <div className="flex flex-col items-center justify-center min-h-[80vh] text-center space-y-8">
           <div className="space-y-4">
             <div className="flex justify-center mb-6">

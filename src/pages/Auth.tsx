@@ -25,15 +25,34 @@ const Auth = () => {
   const [fullName, setFullName] = useState("");
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+    const routeAfterLogin = async (session: any) => {
+      try {
+        const { data: roles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id)
+          .eq("role", "admin")
+          .maybeSingle();
+
+        if (roles) {
+          navigate("/admin-dashboard");
+        } else {
+          navigate("/dashboard");
+        }
+      } catch {
         navigate("/dashboard");
+      }
+    };
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        await routeAfterLogin(session);
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session) {
-        navigate("/dashboard");
+        await routeAfterLogin(session);
       }
     });
 

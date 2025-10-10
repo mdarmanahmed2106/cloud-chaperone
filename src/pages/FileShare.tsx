@@ -98,12 +98,20 @@ const FileShare = () => {
 
       setFile(fileWithProfile);
 
-      // Check if current user has access
+      // Check if current user has access or is admin
       const { data: { user } } = await supabase.auth.getUser();
-      
       if (user) {
-        // Check if user is the owner
-        if (fileWithProfile.user_id === user.id) {
+        // Admins can always access
+        const { data: roles } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('role', 'admin')
+          .maybeSingle();
+
+        if (roles) {
+          setHasAccess(true);
+        } else if (fileWithProfile.user_id === user.id) {
           setHasAccess(true);
         } else {
           // Check if user has explicit permission

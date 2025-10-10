@@ -21,6 +21,7 @@ const Dashboard = () => {
   const { toast } = useToast();
   const [files, setFiles] = useState<FileData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -36,9 +37,17 @@ const Dashboard = () => {
 
   const fetchFiles = async () => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setFiles([]);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("files")
         .select("*")
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -62,10 +71,19 @@ const Dashboard = () => {
     const fileExt = file.name.split(".").pop();
     const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
+    // Simulated progress: smoothly increase to 90% while the upload is in-flight
+    let progressInterval: number | undefined;
     try {
+      setUploadProgress(0);
+      let current = 0;
+      progressInterval = window.setInterval(() => {
+        current = Math.min(current + 2, 90);
+        setUploadProgress(current);
+      }, 100);
+
       const { error: uploadError } = await supabase.storage
         .from("user-files")
-        .upload(fileName, file);
+        .upload(fileName, file, { upsert: false });
 
       if (uploadError) throw uploadError;
 
@@ -79,6 +97,10 @@ const Dashboard = () => {
 
       if (dbError) throw dbError;
 
+      // Finish progress to 100%
+      setUploadProgress(100);
+      setTimeout(() => setUploadProgress(null), 400);
+
       toast({
         title: "Success!",
         description: "File uploaded successfully",
@@ -87,11 +109,14 @@ const Dashboard = () => {
       fetchFiles();
     } catch (error) {
       console.error("Error uploading file:", error);
+      setUploadProgress(null);
       toast({
         title: "Error",
         description: "Failed to upload file",
         variant: "destructive",
       });
+    } finally {
+      if (progressInterval) window.clearInterval(progressInterval);
     }
   };
 
@@ -136,7 +161,7 @@ const Dashboard = () => {
           <p className="text-muted-foreground">Upload and manage your files</p>
         </div>
 
-        <FileUpload onUpload={handleFileUpload} />
+        <FileUpload onUpload={handleFileUpload} uploadProgress={uploadProgress} />
         
         <FileGrid 
           files={files} 

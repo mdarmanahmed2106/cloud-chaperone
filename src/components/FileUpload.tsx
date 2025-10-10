@@ -5,9 +5,10 @@ import { useToast } from "@/hooks/use-toast";
 
 interface FileUploadProps {
   onUpload: (file: File) => void;
+  uploadProgress?: number | null;
 }
 
-const FileUpload = ({ onUpload }: FileUploadProps) => {
+const FileUpload = ({ onUpload, uploadProgress }: FileUploadProps) => {
   const { toast } = useToast();
 
   const handleDrop = useCallback(
@@ -70,6 +71,17 @@ const FileUpload = ({ onUpload }: FileUploadProps) => {
               Maximum file size: 10MB
             </p>
           </div>
+          {typeof uploadProgress === 'number' && (
+            <div className="mt-6">
+              <div className="w-full h-3 rounded-full bg-muted overflow-hidden border border-border">
+                <div
+                  className="h-full bg-primary transition-[width] duration-150"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">{uploadProgress}%</p>
+            </div>
+          )}
         </div>
         <input
           id="file-upload"
